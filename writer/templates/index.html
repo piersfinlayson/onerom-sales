@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>One ROM Sales - Admin</title>
+    <link rel="stylesheet" href="https://onerom.org/style.css">
+    <style>
+        tbody tr:hover {
+            background-color: var(--bg-color);
+        }
+        
+        .edit-row {
+            background-color: var(--input-bg-color) !important;
+        }
+        
+        .edit-row input,
+        .edit-row select {
+            margin: 0;
+            padding: 0.5rem;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.875rem;
+        }
+
+        th, td {
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem;
+            white-space: nowrap;
+        }
+
+        th {
+            background-color: var(--input-bg-color);
+        }
+
+        .form-inline {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .form-inline .select-row {
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-inline .select-row label {
+            width: auto;
+            min-width: 60px;
+        }
+
+        .form-inline select,
+        .form-inline input {
+            margin: 0;
+        }
+
+        .form-inline input[type="number"] {
+            width: 4rem;
+        }
+
+        .form-inline input[type="text"] {
+            width: 10rem;
+        }
+
+        td:nth-child(1),
+        td:nth-child(2),
+        td:nth-child(3),
+        td:nth-child(4),
+        td:nth-child(5),
+        td:nth-child(6),
+        td:nth-child(7) {
+            text-align: center;
+        }
+
+        .app {
+            width: min(90%, 1200px);
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-secondary);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <h1><span class="michroma">One R<span class="o-in-rom">O</span>M Sales</span></h1>
+        
+        <div class="info-summary">
+            Total Sales: <span id="total" class="o-in-rom">Loading...</span>
+            <span style="margin-left: 2rem;">Fire 24: <span id="fire-24" class="o-in-rom">0</span></span>
+            <span style="margin-left: 1rem;">Fire 28: <span id="fire-28" class="o-in-rom">0</span></span>
+            <span style="margin-left: 1rem;">Ice 24: <span id="ice-24" class="o-in-rom">0</span></span>
+        </div>
+
+        <hr>
+        
+        <h2>Add New Sale</h2>
+            <form id="add-form" class="form-inline">
+                <div class="select-row">
+                    <label>Model:</label>
+                    <select id="model" required>
+                        <option value="Ice">Ice</option>
+                        <option value="Fire" selected>Fire</option>
+                    </select>
+                </div>
+                <div class="select-row">
+                    <label>Variant:</label>
+                    <select id="variant" required>
+                        <option value="24pin">24 pin</option>
+                        <option value="28pin" selected>28 pin</option>
+                    </select>
+                </div>
+                <div class="select-row">
+                    <label>Quantity:</label>
+                    <input type="number" id="quantity" value="1" min="1" required>
+                </div>
+                <div class="select-row">
+                    <label>Seller:</label>
+                    <input type="text" id="seller" value="piers.rocks" required>
+                </div>
+                <div class="select-row">
+                    <label>Notes:</label>
+                    <input type="text" id="notes" value="">
+                </div>
+                <button type="submit" class="gold-button">Add Sale</button>
+            </form>
+
+        <hr>
+        
+        <h2>Recent Sales</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Model</th>
+                    <th>Variant</th>
+                    <th>Quantity</th>
+                    <th>Seller</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="recent-body">
+                <tr><td colspan="6">Loading...</td></tr>
+            </tbody>
+        </table>
+        <button id="load-more-btn" style="display: none;">Load More</button>
+    </div>
+    
+    <script>
+        const readerUrlBase = 'http://server1:8106';
+
+        let currentOffset = 0;
+        let totalCount = 0;
+        const limit = 10;
+        
+        function loadTotal() {
+            fetch(readerUrlBase + '/api/sales/total')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('total').textContent = data.total;
+                });
+        }
+        
+        function loadRecent(append = false) {
+            fetch(`/api/sales/recent?offset=${currentOffset}&limit=${limit}`)
+                .then(r => r.json())
+                .then(data => {
+                    totalCount = data.total_count;
+                    const tbody = document.getElementById('recent-body');
+                    
+                    if (data.entries.length === 0 && !append) {
+                        tbody.innerHTML = '<tr><td colspan="6">No sales yet</td></tr>';
+                        document.getElementById('load-more-btn').style.display = 'none';
+                        return;
+                    }
+                    
+                    const rows = data.entries.map(e => 
+                        `<tr data-id="${e.id}">
+                            <td>${new Date(e.date).toLocaleString()}</td>
+                            <td class="model">${e.model}</td>
+                            <td class="variant">${e.variant}</td>
+                            <td class="quantity">${e.quantity}</td>
+                            <td class="seller">${e.seller}</td>
+                            <td class="notes">${e.notes || ''}</td>
+                            <td>
+                                <button onclick="editRow(${e.id})">Edit</button>
+                                <button onclick="deleteRow(${e.id})">Delete</button>
+                            </td>
+                        </tr>`
+                    ).join('');
+                    
+                    if (append) {
+                        tbody.innerHTML += rows;
+                    } else {
+                        tbody.innerHTML = rows;
+                    }
+                    
+                    currentOffset += data.entries.length;
+                    
+                    if (currentOffset >= totalCount) {
+                        document.getElementById('load-more-btn').style.display = 'none';
+                    } else {
+                        document.getElementById('load-more-btn').style.display = 'block';
+                    }
+                });
+        }
+        
+        function editRow(id) {
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            if (row.classList.contains('edit-row')) return;
+            
+            row.classList.add('edit-row');
+            const model = row.querySelector('.model').textContent;
+            const variant = row.querySelector('.variant').textContent;
+            const quantity = row.querySelector('.quantity').textContent;
+            const seller = row.querySelector('.seller').textContent;
+            const notes = row.querySelector('.notes').textContent;
+
+            row.querySelector('.model').innerHTML = `
+                <select class="edit-model">
+                    <option value="Ice" ${model === 'Ice' ? 'selected' : ''}>Ice</option>
+                    <option value="Fire" ${model === 'Fire' ? 'selected' : ''}>Fire</option>
+                </select>`;
+            row.querySelector('.variant').innerHTML = `
+                <select class="edit-variant">
+                    <option value="24pin" ${variant === '24pin' ? 'selected' : ''}>24 pin</option>
+                    <option value="28pin" ${variant === '28pin' ? 'selected' : ''}>28 pin</option>
+                </select>`;
+            row.querySelector('.quantity').innerHTML = `<input type="number" class="edit-quantity" value="${quantity}" min="1">`;
+            row.querySelector('.seller').innerHTML = `<input type="text" class="edit-seller" value="${seller}">`;
+            row.querySelector('.notes').innerHTML = `<input type="text" class="edit-notes" value="${notes}">`;
+            row.querySelector('td:last-child').innerHTML = `
+                <button onclick="saveRow(${id})">Save</button>
+                <button onclick="cancelEdit(${id})">Cancel</button>`;
+        }
+        
+        function saveRow(id) {
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            const data = {
+                model: row.querySelector('.edit-model').value,
+                variant: row.querySelector('.edit-variant').value,
+                quantity: parseInt(row.querySelector('.edit-quantity').value),
+                seller: row.querySelector('.edit-seller').value,
+                notes: row.querySelector('.edit-notes').value
+            };
+            
+            fetch(`/api/sales/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.status === 'ok') {
+                    loadTotal();
+                    loadBreakdown(); 
+                    currentOffset = 0;
+                    loadRecent();
+                }
+            });
+        }
+        
+        function cancelEdit(id) {
+            currentOffset = 0;
+            loadRecent();
+        }
+        
+        function deleteRow(id) {
+            if (!confirm('Are you sure you want to delete this sale?')) return;
+            
+            fetch(`/api/sales/${id}`, {
+                method: 'DELETE'
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.status === 'ok') {
+                    loadTotal();
+                    loadBreakdown(); 
+                    currentOffset = 0;
+                    loadRecent();
+                }
+            });
+        }
+
+        function loadBreakdown() {
+            fetch(readerUrlBase + '/api/sales/by-type')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('fire-24').textContent = 0;
+                    document.getElementById('fire-28').textContent = 0;
+                    document.getElementById('ice-24').textContent = 0;
+                    
+                    data.breakdown.forEach(item => {
+                        const id = `${item.model.toLowerCase()}-${item.variant.replace('pin', '')}`;
+                        const elem = document.getElementById(id);
+                        if (elem) elem.textContent = item.count;
+                    });
+                });
+        }
+        
+        // Add a sales record
+        document.getElementById('add-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            const data = {
+                model: document.getElementById('model').value,
+                variant: document.getElementById('variant').value,
+                quantity: parseInt(document.getElementById('quantity').value),
+                seller: document.getElementById('seller').value,
+                notes: document.getElementById('notes').value
+            };
+            
+            fetch('/api/sales', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.status === 'ok') {
+                    loadTotal();
+                    loadBreakdown(); 
+                    currentOffset = 0;
+                    loadRecent();
+                    document.getElementById('model').value = 'Fire';
+                    document.getElementById('variant').value = '28pin';
+                    document.getElementById('quantity').value = '1';
+                    document.getElementById('seller').value = 'piers.rocks';
+                    document.getElementById('notes').value = '';
+                }
+            });
+        });
+        
+        document.getElementById('load-more-btn').addEventListener('click', function() {
+            loadRecent(true);
+        });
+        
+        loadTotal();
+        loadRecent();
+        loadBreakdown();
+    </script>
+</body>
+</html>
