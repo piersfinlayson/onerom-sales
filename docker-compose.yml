@@ -15,4 +15,5 @@ services:
     volumes:
       - ./data:/data
       - ./writer/templates:/app/templates
+    restart: unless-stopped
     stop_grace_period: 2s
